@@ -77,6 +77,10 @@ button:hover{border-color:var(--muted)}
 .reg-legend i{width:10px;height:10px;border-radius:2px;display:inline-block}
 .reg-row{display:grid;grid-template-columns:minmax(110px,150px) 1fr;gap:6px 16px;align-items:center;padding-top:14px;border-top:1px solid var(--line)}
 .reg-nm{font:800 22px/1.1 var(--display);letter-spacing:.02em}
+.uf-sub{font:500 12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding-top:10px}
+#ufRows .reg-row{padding-top:10px}
+#ufRows .reg-nm{font-size:18px}
+#ufRows .reg-split{height:18px}
 .reg-ap{font:400 12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
 .reg-bars{display:grid;gap:6px;min-width:0}
 .reg-split{height:22px;border-radius:5px;overflow:hidden;display:flex;background:var(--line)}
@@ -142,9 +146,21 @@ footer a{color:inherit}
     <div id="regRows" class="reg"><div class="small">Carregando as 27 UFs…</div></div>
   </section>
 
+  <section class="panel reg" id="ufPanel" aria-label="Resultado por estado">
+    <div class="reg-head">
+      <div class="eyebrow">Por estado</div>
+      <select id="ufOrdem" aria-label="Ordenar estados">
+        <option value="regiao">Agrupar por região</option>
+        <option value="apurado">Menos apurados primeiro</option>
+        <option value="eleitores">Maiores colégios primeiro</option>
+      </select>
+    </div>
+    <div id="ufRows" class="reg"><div class="small">Carregando as 27 UFs…</div></div>
+  </section>
+
   <section class="panel totals" id="totais"></section>
 
-  <footer>Dados: divulgação oficial do TSE (resultados.tse.jus.br). Números parciais podem mudar até a totalização final. Brasil atualiza a cada 30 s; regiões a cada 60 s (soma das 27 UFs, sem exterior).</footer>
+  <footer>Dados: divulgação oficial do TSE (resultados.tse.jus.br). Números parciais podem mudar até a totalização final. Brasil atualiza a cada 30 s; regiões e estados a cada 60 s (soma das 27 UFs, sem exterior).</footer>
 </div>
 
 <script>
@@ -257,6 +273,8 @@ function render(d){
     item("Comparecimento",fmt(num(g("e","c"))),g("e","pc")?pctTxt(g("e","pc")):"");
 }
 
+const NOMES_UF={ac:"Acre",al:"Alagoas",ap:"Amapá",am:"Amazonas",ba:"Bahia",ce:"Ceará",df:"Distrito Federal",es:"Espírito Santo",go:"Goiás",ma:"Maranhão",mt:"Mato Grosso",ms:"Mato Grosso do Sul",mg:"Minas Gerais",pa:"Pará",pb:"Paraíba",pr:"Paraná",pe:"Pernambuco",pi:"Piauí",rj:"Rio de Janeiro",rn:"Rio Grande do Norte",rs:"Rio Grande do Sul",ro:"Rondônia",rr:"Roraima",sc:"Santa Catarina",sp:"São Paulo",se:"Sergipe",to:"Tocantins"};
+let ultPorUF=null;
 const REGIOES=[
   ["Norte","ac am ap pa ro rr to"],
   ["Nordeste","al ba ce ma pb pe pi rn se"],
@@ -281,26 +299,47 @@ async function atualizarRegioes(cd){
   const lg=$("regLegend"); lg.textContent="";
   ordem.slice(0,3).forEach((c,i)=>{const sp=document.createElement("span");const dot=document.createElement("i");dot.style.background=COLORS[i]||COLORS[2];sp.append(dot,c.nm||("Nº "+c.n));lg.append(sp)});
 
-  const rows=REGIOES.map(rg=>{
-    let st=0,ts=0,ok=0; const v={};
-    for(const u of rg.ufs){const x=porUF[u]; if(!x) continue; ok++; st+=x.st; ts+=x.ts; for(const k in x.votos) v[k]=(v[k]||0)+x.votos[k];}
-    const tot=Object.values(v).reduce((a,b)=>a+b,0);
-    const ap=ts?st/ts*100:0;
-    const cs=(ordem.length?ordem:Object.keys(v).map(n=>({n}))).map((c,i)=>({nm:c.nm||("Nº "+c.n),vap:v[c.n]||0,p:tot?(v[c.n]||0)/tot*100:0,cor:COLORS[i]||COLORS[2]}));
-    const f2=x=>x.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
-    const segs=cs.map(c=>`<i style="width:${c.p}%;background:${c.cor}">${c.p>=12?f2(c.p)+"%":""}</i>`).join("");
-    const nums=cs.map(c=>`<span>${esc(c.nm)} ${f2(c.p)}% · ${fmt(c.vap)}</span>`).join("");
-    const faltou=ok<rg.ufs.length?` · ${rg.ufs.length-ok} UF sem dados`:"";
-    return `<div class="reg-row">
-      <div><div class="reg-nm">${rg.nm}</div><div class="reg-ap">${f2(ap)}% apurado${faltou}</div></div>
-      <div class="reg-bars">
-        <div class="reg-split">${segs}</div>
-        <div class="reg-track" title="Seções apuradas"><b style="width:${Math.min(ap,100)}%"></b></div>
-        <div class="reg-nums">${nums}</div>
-      </div>
-    </div>`;
-  }).join("");
+  const rows=REGIOES.map(rg=>linha(rg.nm,rg.ufs,porUF,ordem)).join("");
   $("regRows").innerHTML=rows;
+  ultPorUF=porUF; renderUFs();
+}
+
+function linha(nome,ufs,porUF,ordem,sub){
+  let st=0,ts=0,ok=0; const v={};
+  for(const u of ufs){const x=porUF[u]; if(!x) continue; ok++; st+=x.st; ts+=x.ts; for(const k in x.votos) v[k]=(v[k]||0)+x.votos[k];}
+  const tot=Object.values(v).reduce((a,b)=>a+b,0);
+  const ap=ts?st/ts*100:0;
+  const cs=(ordem.length?ordem:Object.keys(v).map(n=>({n}))).map((c,i)=>({nm:c.nm||("Nº "+c.n),vap:v[c.n]||0,p:tot?(v[c.n]||0)/tot*100:0,cor:COLORS[i]||COLORS[2]}));
+  const f2=x=>x.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+  const segs=cs.map(c=>`<i style="width:${c.p}%;background:${c.cor}">${c.p>=12?f2(c.p)+"%":""}</i>`).join("");
+  const nums=cs.map(c=>`<span>${esc(c.nm)} ${f2(c.p)}% · ${fmt(c.vap)}</span>`).join("");
+  const faltou=ok<ufs.length?(ufs.length===1?" · sem dados":` · ${ufs.length-ok} UF sem dados`):"";
+  return `<div class="reg-row">
+    <div><div class="reg-nm">${esc(nome)}</div><div class="reg-ap">${sub?esc(sub)+" · ":""}${f2(ap)}% apurado${faltou}</div></div>
+    <div class="reg-bars">
+      <div class="reg-split">${segs}</div>
+      <div class="reg-track" title="Seções apuradas"><b style="width:${Math.min(ap,100)}%"></b></div>
+      <div class="reg-nums">${nums}</div>
+    </div>
+  </div>`;
+}
+
+function renderUFs(){
+  const porUF=ultPorUF; if(!porUF) return;
+  const ordem=ordemNac, modo=$("ufOrdem").value;
+  const ap=u=>{const x=porUF[u];return x&&x.ts?x.st/x.ts:2};
+  const tam=u=>{const x=porUF[u];return x?x.ts:0};
+  const lin=u=>linha(NOMES_UF[u],[u],porUF,ordem,u.toUpperCase());
+  let html="";
+  if(modo==="regiao"){
+    for(const rg of REGIOES){
+      html+=`<div class="uf-sub">${rg.nm}</div>`+rg.ufs.slice().sort((a,b)=>NOMES_UF[a].localeCompare(NOMES_UF[b],"pt")).map(lin).join("");
+    }
+  }else{
+    const lista=UFS.slice().sort(modo==="apurado"?(a,b)=>ap(a)-ap(b):(a,b)=>tam(b)-tam(a));
+    html=lista.map(lin).join("");
+  }
+  $("ufRows").innerHTML=html;
 }
 const esc=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
@@ -324,7 +363,8 @@ async function atualizar(){
   }
 }
 
-$("btnRefresh").addEventListener("click",atualizar);
+$("btnRefresh").addEventListener("click",()=>{ultRegiao=0;atualizar()});
+$("ufOrdem").addEventListener("change",renderUFs);
 $("codManual").addEventListener("change",()=>{elecFed=null;atualizar()});
 atualizar();
 timer=setInterval(atualizar,30000);
