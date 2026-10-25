@@ -69,6 +69,22 @@ button:hover{border-color:var(--muted)}
 .gap-big{font:800 48px/1 var(--display);font-variant-numeric:tabular-nums}
 .gap-lead{font:500 14px var(--body);color:var(--muted)}
 .gap-lead b{color:var(--ink);font-weight:600}
+
+.reg{display:grid;gap:18px}
+.reg-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:8px}
+.reg-legend{display:flex;flex-wrap:wrap;gap:14px;font:500 13px var(--body);color:var(--muted)}
+.reg-legend span{display:inline-flex;align-items:center;gap:6px}
+.reg-legend i{width:10px;height:10px;border-radius:2px;display:inline-block}
+.reg-row{display:grid;grid-template-columns:minmax(110px,150px) 1fr;gap:6px 16px;align-items:center;padding-top:14px;border-top:1px solid var(--line)}
+.reg-nm{font:800 22px/1.1 var(--display);letter-spacing:.02em}
+.reg-ap{font:400 12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.reg-bars{display:grid;gap:6px;min-width:0}
+.reg-split{height:22px;border-radius:5px;overflow:hidden;display:flex;background:var(--line)}
+.reg-split i{display:flex;align-items:center;justify-content:center;height:100%;font:600 12px var(--mono);color:var(--surface);white-space:nowrap;overflow:hidden;transition:width .6s ease;font-style:normal}
+.reg-track{height:4px;border-radius:2px;background:var(--line);overflow:hidden}
+.reg-track b{display:block;height:100%;background:var(--ink);transition:width .6s ease}
+.reg-nums{display:flex;flex-wrap:wrap;gap:4px 14px;font:400 12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+@media (max-width:520px){.reg-row{grid-template-columns:1fr}}
 footer{font-size:12px;color:var(--muted)}
 footer a{color:inherit}
 </style>
@@ -78,15 +94,12 @@ footer a{color:inherit}
   <header>
     <div>
       <div class="eyebrow">Eleições Gerais 2026 · 25 de outubro</div>
-      <h1 id="titulo">Apuração · 2º turno</h1>
+      <h1 id="titulo">Presidente · 2º turno</h1>
     </div>
     <div class="status"><span class="dot" id="dot"></span><span id="statusTxt">carregando…</span></div>
   </header>
 
   <div class="controls">
-    <select id="cargo" aria-label="Cargo">
-      <option value="br">Presidente · Brasil</option>
-    </select>
     <button id="btnRefresh" type="button">Atualizar agora</button>
     <input id="codManual" placeholder="cód. eleição (opcional)" size="18" aria-label="Código da eleição">
   </div>
@@ -121,9 +134,17 @@ footer a{color:inherit}
     <div class="mid">50% + 1 voto válido</div>
   </section>
 
+  <section class="panel reg" id="regPanel" aria-label="Resultado por região">
+    <div class="reg-head">
+      <div class="eyebrow">Por região</div>
+      <div class="reg-legend" id="regLegend"></div>
+    </div>
+    <div id="regRows" class="reg"><div class="small">Carregando as 27 UFs…</div></div>
+  </section>
+
   <section class="panel totals" id="totais"></section>
 
-  <footer>Dados: divulgação oficial do TSE (resultados.tse.jus.br). Números parciais podem mudar até a totalização final. Atualiza a cada 30 s.</footer>
+  <footer>Dados: divulgação oficial do TSE (resultados.tse.jus.br). Números parciais podem mudar até a totalização final. Brasil atualiza a cada 30 s; regiões a cada 60 s (soma das 27 UFs, sem exterior).</footer>
 </div>
 
 <script>
@@ -131,7 +152,7 @@ const BASE="https://resultados.tse.jus.br/oficial";
 const CICLO="ele2026";
 const UFS="ac al ap am ba ce df es go ma mt ms mg pa pb pr pe pi rj rn rs ro rr sc sp se to".split(" ");
 const COLORS=["var(--c1)","var(--c2)","var(--muted)"];
-let elecFed=null, elecEst=null, timer=null;
+let elecFed=null, elecEst=null, timer=null, ordemNac=[], ultRegiao=0;
 const $=id=>document.getElementById(id);
 const pad6=c=>String(c).padStart(6,"0");
 const num=s=>Number(String(s??"0").replace(/\./g,"").replace(",","."))||0;
@@ -162,21 +183,12 @@ async function descobrir(){
   elecEst=(t2.find(e=>/estadual/i.test(e.nm||""))||null)?.cd||null;
 }
 
-function montarCargos(){
-  const sel=$("cargo"), atual=sel.value;
-  sel.innerHTML='<option value="br">Presidente · Brasil</option>'+
-    (elecEst?UFS.map(u=>`<option value="${u}">Governador · ${u.toUpperCase()}</option>`).join(""):"");
-  sel.value=[...sel.options].some(o=>o.value===atual)?atual:"br";
-}
-
+const codAtual=()=>$("codManual").value.trim()||elecFed;
+const urlUF=(ab,cd)=>`${BASE}/${CICLO}/${cd}/dados/${ab}/${ab}-c0001-e${pad6(cd)}-u.json`;
 function urlResultado(){
-  const ab=$("cargo").value;
-  const manual=$("codManual").value.trim();
-  const isBR=ab==="br";
-  const cd=manual||(isBR?elecFed:(elecEst||elecFed));
+  const cd=codAtual();
   if(!cd) return null;
-  const cargo=isBR?"0001":"0003";
-  return `${BASE}/${CICLO}/${cd}/dados/${ab}/${ab}-c${cargo}-e${pad6(cd)}-u.json`;
+  return urlUF("br",cd);
 }
 
 /* EA20 (2026): totais em blocos aninhados (s, v, e) e candidatos dentro de carg/agr/par.
@@ -195,8 +207,6 @@ function coletarCands(node,partido,out){
 }
 
 function render(d){
-  const ab=$("cargo").value;
-  $("titulo").textContent=ab==="br"?"Presidente · 2º turno":`Governador ${ab.toUpperCase()} · 2º turno`;
   const pstRaw=pick(d,"s","pst");
   $("pst").textContent=pstRaw!=null?pctTxt(pstRaw):"—";
   $("fillPst").style.width=Math.min(num(pstRaw),100)+"%";
@@ -222,6 +232,7 @@ function render(d){
     el.querySelector(".party").textContent=cands[i].party||"";
   });
 
+  ordemNac=cands.map(c=>({n:String(c.n),nm:c.nm}));
   $("gapPanel").hidden=cands.length<2;
   if(cands.length>=2){
     const a=cands[0], b=cands[1];
@@ -246,15 +257,66 @@ function render(d){
     item("Comparecimento",fmt(num(g("e","c"))),g("e","pc")?pctTxt(g("e","pc")):"");
 }
 
+const REGIOES=[
+  ["Norte","ac am ap pa ro rr to"],
+  ["Nordeste","al ba ce ma pb pe pi rn se"],
+  ["Centro-Oeste","df go ms mt"],
+  ["Sudeste","es mg rj sp"],
+  ["Sul","pr rs sc"]
+].map(([nm,u])=>({nm,ufs:u.split(" ")}));
+
+function extrairUF(d){
+  const st=num(pick(d,"s","st")), ts=num(pick(d,"s","ts"));
+  const votos={};
+  for(const c of coletarCands(d.carg||d.cand||d,"",[])) votos[String(c.n)]=num(c.vap);
+  return {st,ts,votos};
+}
+
+async function atualizarRegioes(cd){
+  const res=await Promise.allSettled(UFS.map(u=>getJSON(urlUF(u,cd)).then(d=>[u,extrairUF(d)])));
+  const porUF={}; let falhas=0;
+  for(const r of res){ if(r.status==="fulfilled") porUF[r.value[0]]=r.value[1]; else falhas++; }
+  if(falhas===UFS.length) throw new Error("nenhuma UF respondeu");
+  const ordem=ordemNac.length?ordemNac:[];
+  const lg=$("regLegend"); lg.textContent="";
+  ordem.slice(0,3).forEach((c,i)=>{const sp=document.createElement("span");const dot=document.createElement("i");dot.style.background=COLORS[i]||COLORS[2];sp.append(dot,c.nm||("Nº "+c.n));lg.append(sp)});
+
+  const rows=REGIOES.map(rg=>{
+    let st=0,ts=0,ok=0; const v={};
+    for(const u of rg.ufs){const x=porUF[u]; if(!x) continue; ok++; st+=x.st; ts+=x.ts; for(const k in x.votos) v[k]=(v[k]||0)+x.votos[k];}
+    const tot=Object.values(v).reduce((a,b)=>a+b,0);
+    const ap=ts?st/ts*100:0;
+    const cs=(ordem.length?ordem:Object.keys(v).map(n=>({n}))).map((c,i)=>({nm:c.nm||("Nº "+c.n),vap:v[c.n]||0,p:tot?(v[c.n]||0)/tot*100:0,cor:COLORS[i]||COLORS[2]}));
+    const f2=x=>x.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+    const segs=cs.map(c=>`<i style="width:${c.p}%;background:${c.cor}">${c.p>=12?f2(c.p)+"%":""}</i>`).join("");
+    const nums=cs.map(c=>`<span>${esc(c.nm)} ${f2(c.p)}% · ${fmt(c.vap)}</span>`).join("");
+    const faltou=ok<rg.ufs.length?` · ${rg.ufs.length-ok} UF sem dados`:"";
+    return `<div class="reg-row">
+      <div><div class="reg-nm">${rg.nm}</div><div class="reg-ap">${f2(ap)}% apurado${faltou}</div></div>
+      <div class="reg-bars">
+        <div class="reg-split">${segs}</div>
+        <div class="reg-track" title="Seções apuradas"><b style="width:${Math.min(ap,100)}%"></b></div>
+        <div class="reg-nums">${nums}</div>
+      </div>
+    </div>`;
+  }).join("");
+  $("regRows").innerHTML=rows;
+}
+const esc=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
 async function atualizar(){
   try{
     if(!elecFed && !$("codManual").value.trim()){
-      await descobrir(); montarCargos();
+      await descobrir();
     }
     const url=urlResultado();
     if(!url){aviso("O TSE ainda não publicou o código da eleição de 2º turno no config. Informe o código manualmente no campo acima, se souber.");status("aguardando código");return}
     const d=await getJSON(url);
     render(d); aviso("");
+    if(Date.now()-ultRegiao>55000){
+      ultRegiao=Date.now();
+      atualizarRegioes(codAtual()).catch(e=>{$("regRows").innerHTML=`<div class="small">Não foi possível ler as UFs (${esc(e.message)}).</div>`});
+    }
     status("ao vivo · "+new Date().toLocaleTimeString("pt-BR"),"live");
   }catch(e){
     status("falha na leitura","err");
@@ -263,7 +325,6 @@ async function atualizar(){
 }
 
 $("btnRefresh").addEventListener("click",atualizar);
-$("cargo").addEventListener("change",atualizar);
 $("codManual").addEventListener("change",()=>{elecFed=null;atualizar()});
 atualizar();
 timer=setInterval(atualizar,30000);
