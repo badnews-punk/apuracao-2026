@@ -10,7 +10,7 @@
 /* Layout: painel único estilo "boletim de urna" — cabeçalho com status, barra de seções totalizadas, cartões de candidato, rodapé com votos válidos/brancos/nulos */
 :root{
   --bg:#f3f5f4; --surface:#ffffff; --ink:#15201c; --muted:#5d6b66; --line:#d9e0dd;
-  --c1:#1f5f8b; --c2:#8a5a1f; --ok:#1d7a4f; --warn:#a86a00; --err:#b3261e;
+  --c1:#1f5f8b; --c2:#8a5a1f; --red:#c62828; --blue:#1e5bb8; --ok:#1d7a4f; --warn:#a86a00; --err:#b3261e;
   --display:"Big Shoulders Display","Arial Narrow",Impact,sans-serif;
   --body:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
@@ -18,7 +18,7 @@
 }
 @media (prefers-color-scheme:dark){:root{
   --bg:#0f1513; --surface:#18201d; --ink:#e6ece9; --muted:#93a39d; --line:#2a3531;
-  --c1:#6fb3e0; --c2:#e0a96a; --ok:#5fcf98; --warn:#f0b54a; --err:#ff8a80; color-scheme:dark}}
+  --c1:#6fb3e0; --c2:#e0a96a; --red:#e2534f; --blue:#4c8ee8; --ok:#5fcf98; --warn:#f0b54a; --err:#ff8a80; color-scheme:dark}}
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--body);
@@ -168,6 +168,8 @@ const BASE="https://resultados.tse.jus.br/oficial";
 const CICLO="ele2026";
 const UFS="ac al ap am ba ce df es go ma mt ms mg pa pb pr pe pi rj rn rs ro rr sc sp se to".split(" ");
 const COLORS=["var(--c1)","var(--c2)","var(--muted)"];
+/* Lula em vermelho, o outro candidato em azul */
+const cor=nm=>/lula/i.test(nm||"")?"var(--red)":"var(--blue)";
 let elecFed=null, elecEst=null, timer=null, ordemNac=[], ultRegiao=0;
 const $=id=>document.getElementById(id);
 const pad6=c=>String(c).padStart(6,"0");
@@ -241,7 +243,7 @@ function render(d){
       <div class="party"></div>
       <div class="pct">${pctTxt(c.pvap)}</div>
       <div class="votes">${fmt(num(c.vap))} votos</div>
-      <div class="bar"><i style="width:${p}%;background:${COLORS[i]||COLORS[2]}"></i></div>
+      <div class="bar"><i style="width:${p}%;background:${cor(c.nm)}"></i></div>
     </article>`;}).join("");
   [...$("duel").children].forEach((el,i)=>{
     el.querySelector(".nm").textContent=cands[i].nm||"—";
@@ -261,7 +263,7 @@ function render(d){
     lead.append(dv===0?"Empate entre ":"", bA, dv===0?" e ":" à frente de ", bB);
   }
   $("splitPanel").hidden=cands.length<2;
-  $("split").innerHTML=cands.map((c,i)=>`<i style="width:${num(c.pvap)}%;background:${COLORS[i]||COLORS[2]}" title="${num(c.pvap)}%"></i>`).join("");
+  $("split").innerHTML=cands.map((c,i)=>`<i style="width:${num(c.pvap)}%;background:${cor(c.nm)}" title="${num(c.pvap)}%"></i>`).join("");
 
   const item=(rot,v,p)=>`<div><span class="eyebrow">${rot}</span><b>${v}</b>${p?`<span class="small">${p}</span>`:""}</div>`;
   const g=(b,k)=>pick(d,b,k);
@@ -297,7 +299,7 @@ async function atualizarRegioes(cd){
   if(falhas===UFS.length) throw new Error("nenhuma UF respondeu");
   const ordem=ordemNac.length?ordemNac:[];
   const lg=$("regLegend"); lg.textContent="";
-  ordem.slice(0,3).forEach((c,i)=>{const sp=document.createElement("span");const dot=document.createElement("i");dot.style.background=COLORS[i]||COLORS[2];sp.append(dot,c.nm||("Nº "+c.n));lg.append(sp)});
+  ordem.slice(0,3).forEach((c,i)=>{const sp=document.createElement("span");const dot=document.createElement("i");dot.style.background=cor(c.nm);sp.append(dot,c.nm||("Nº "+c.n));lg.append(sp)});
 
   const rows=REGIOES.map(rg=>linha(rg.nm,rg.ufs,porUF,ordem)).join("");
   $("regRows").innerHTML=rows;
@@ -309,7 +311,7 @@ function linha(nome,ufs,porUF,ordem,sub){
   for(const u of ufs){const x=porUF[u]; if(!x) continue; ok++; st+=x.st; ts+=x.ts; for(const k in x.votos) v[k]=(v[k]||0)+x.votos[k];}
   const tot=Object.values(v).reduce((a,b)=>a+b,0);
   const ap=ts?st/ts*100:0;
-  const cs=(ordem.length?ordem:Object.keys(v).map(n=>({n}))).map((c,i)=>({nm:c.nm||("Nº "+c.n),vap:v[c.n]||0,p:tot?(v[c.n]||0)/tot*100:0,cor:COLORS[i]||COLORS[2]}));
+  const cs=(ordem.length?ordem:Object.keys(v).map(n=>({n}))).map((c,i)=>({nm:c.nm||("Nº "+c.n),vap:v[c.n]||0,p:tot?(v[c.n]||0)/tot*100:0,cor:cor(c.nm)}));
   const f2=x=>x.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
   const segs=cs.map(c=>`<i style="width:${c.p}%;background:${c.cor}">${c.p>=12?f2(c.p)+"%":""}</i>`).join("");
   const nums=cs.map(c=>`<span>${esc(c.nm)} ${f2(c.p)}% · ${fmt(c.vap)}</span>`).join("");
