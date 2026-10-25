@@ -63,6 +63,12 @@ button:hover{border-color:var(--muted)}
 .totals b{font:600 18px var(--mono);font-variant-numeric:tabular-nums}
 .msg{border-left:3px solid var(--warn);padding:10px 14px;background:var(--surface);border-radius:0 8px 8px 0;font-size:14px}
 .msg.err{border-color:var(--err)}
+
+.gap{display:grid;gap:14px}
+.gap-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+.gap-big{font:800 48px/1 var(--display);font-variant-numeric:tabular-nums}
+.gap-lead{font:500 14px var(--body);color:var(--muted)}
+.gap-lead b{color:var(--ink);font-weight:600}
 footer{font-size:12px;color:var(--muted)}
 footer a{color:inherit}
 </style>
@@ -99,6 +105,15 @@ footer a{color:inherit}
   </section>
 
   <section class="duel" id="duel"></section>
+
+  <section class="panel gap" id="gapPanel" hidden aria-label="Diferença entre os candidatos">
+    <div class="eyebrow">Diferença</div>
+    <div class="gap-lead" id="gapLead"></div>
+    <div class="gap-row">
+      <div><div class="eyebrow">Em votos</div><div class="gap-big" id="gapVotos">—</div></div>
+      <div><div class="eyebrow">Em pontos percentuais</div><div class="gap-big" id="gapPct">—</div></div>
+    </div>
+  </section>
 
   <section class="panel split-wrap" id="splitPanel" hidden>
     <div class="eyebrow">Votos válidos</div>
@@ -207,6 +222,17 @@ function render(d){
     el.querySelector(".party").textContent=cands[i].party||"";
   });
 
+  $("gapPanel").hidden=cands.length<2;
+  if(cands.length>=2){
+    const a=cands[0], b=cands[1];
+    const dv=num(a.vap)-num(b.vap), dp=num(a.pvap)-num(b.pvap);
+    $("gapVotos").textContent=fmt(dv);
+    $("gapPct").textContent=dp.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+" p.p.";
+    const lead=$("gapLead"); lead.textContent="";
+    const bA=document.createElement("b"); bA.textContent=a.nm||"—";
+    const bB=document.createElement("b"); bB.textContent=b.nm||"—";
+    lead.append(dv===0?"Empate entre ":"", bA, dv===0?" e ":" à frente de ", bB);
+  }
   $("splitPanel").hidden=cands.length<2;
   $("split").innerHTML=cands.map((c,i)=>`<i style="width:${num(c.pvap)}%;background:${COLORS[i]||COLORS[2]}" title="${num(c.pvap)}%"></i>`).join("");
 
