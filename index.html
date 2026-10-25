@@ -158,21 +158,39 @@ function urlResultado(){
   const ab=$("cargo").value;
   const manual=$("codManual").value.trim();
   const isBR=ab==="br";
-  const cd=manual||(isBR?elecFed:elecEst);
+  const cd=manual||(isBR?elecFed:(elecEst||elecFed));
   if(!cd) return null;
   const cargo=isBR?"0001":"0003";
-  return `${BASE}/${CICLO}/${cd}/dados-simplificados/${ab}/${ab}-c${cargo}-e${pad6(cd)}-r.json`;
+  return `${BASE}/${CICLO}/${cd}/dados/${ab}/${ab}-c${cargo}-e${pad6(cd)}-u.json`;
+}
+
+/* EA20 (2026): totais em blocos aninhados (s, v, e) e candidatos dentro de carg/agr/par.
+   Lê os dois formatos: procura em d.x e cai para campos planos. */
+const pick=(d,blk,k)=>(d[blk]&&d[blk][k]!=null)?d[blk][k]:d[k];
+function coletarCands(node,partido,out){
+  if(Array.isArray(node)){node.forEach(n=>coletarCands(n,partido,out));return out}
+  if(!node||typeof node!=="object") return out;
+  if("vap" in node && ("nmu" in node||"nm" in node||"n" in node) && !("agr" in node)&&!("par" in node)){
+    out.push({n:node.n,nm:node.nmu||node.nm,party:node.cc||partido||"",vap:node.vap,pvap:node.pvap,e:node.e,st:node.st});
+    return out;
+  }
+  const p=node.sg?(node.sg):(node.nm&&("cand" in node)?node.nm:partido);
+  for(const k of Object.keys(node)){const v=node[k];if(v&&typeof v==="object")coletarCands(v,p,out)}
+  return out;
 }
 
 function render(d){
   const ab=$("cargo").value;
   $("titulo").textContent=ab==="br"?"Presidente · 2º turno":`Governador ${ab.toUpperCase()} · 2º turno`;
-  const pst=num(d.pst);
-  $("pst").textContent=pctTxt(d.pst);
-  $("fillPst").style.width=Math.min(pst,100)+"%";
-  $("hora").textContent=`TSE ${d.dg||""} ${d.hg||""}`.trim();
+  const pstRaw=pick(d,"s","pst");
+  $("pst").textContent=pstRaw!=null?pctTxt(pstRaw):"—";
+  $("fillPst").style.width=Math.min(num(pstRaw),100)+"%";
+  const st=pick(d,"s","st"), ts=pick(d,"s","ts");
+  $("hora").textContent=`TSE ${d.dg||""} ${d.hg||""}`.trim()+(st!=null&&ts!=null?` · ${fmt(num(st))} de ${fmt(num(ts))} seções`:"");
 
-  const cands=(d.cand||[]).slice().sort((a,b)=>num(b.vap)-num(a.vap));
+  const vistos=new Set();
+  const cands=coletarCands(d.carg||d.cand||d,"",[]).filter(c=>{const k=c.n+"|"+c.nm;if(vistos.has(k))return false;vistos.add(k);return true})
+    .sort((a,b)=>num(b.vap)-num(a.vap));
   $("duel").innerHTML=cands.map((c,i)=>{
     const p=num(c.pvap), eleito=/^s/i.test(c.e||"")||/eleito/i.test(c.st||"");
     return `<article class="cand">
@@ -186,19 +204,20 @@ function render(d){
     </article>`;}).join("");
   [...$("duel").children].forEach((el,i)=>{
     el.querySelector(".nm").textContent=cands[i].nm||"—";
-    el.querySelector(".party").textContent=cands[i].cc||"";
+    el.querySelector(".party").textContent=cands[i].party||"";
   });
 
   $("splitPanel").hidden=cands.length<2;
   $("split").innerHTML=cands.map((c,i)=>`<i style="width:${num(c.pvap)}%;background:${COLORS[i]||COLORS[2]}" title="${num(c.pvap)}%"></i>`).join("");
 
   const item=(rot,v,p)=>`<div><span class="eyebrow">${rot}</span><b>${v}</b>${p?`<span class="small">${p}</span>`:""}</div>`;
+  const g=(b,k)=>pick(d,b,k);
   $("totais").innerHTML=
-    item("Válidos",fmt(num(d.vv)),d.pvv?pctTxt(d.pvv):"")+
-    item("Brancos",fmt(num(d.vb)),d.pvb?pctTxt(d.pvb):"")+
-    item("Nulos",fmt(num(d.tvn??d.vn)),(d.ptvn??d.pvn)?pctTxt(d.ptvn??d.pvn):"")+
-    item("Abstenção",fmt(num(d.a)),d.pa?pctTxt(d.pa):"")+
-    item("Comparecimento",fmt(num(d.c)),d.pc?pctTxt(d.pc):"");
+    item("Válidos",fmt(num(g("v","vv"))),g("v","pvv")?pctTxt(g("v","pvv")):"")+
+    item("Brancos",fmt(num(g("v","vb"))),g("v","pvb")?pctTxt(g("v","pvb")):"")+
+    item("Nulos",fmt(num(g("v","tvn")??g("v","vn"))),(g("v","ptvn")??g("v","pvn"))?pctTxt(g("v","ptvn")??g("v","pvn")):"")+
+    item("Abstenção",fmt(num(g("e","a"))),g("e","pa")?pctTxt(g("e","pa")):"")+
+    item("Comparecimento",fmt(num(g("e","c"))),g("e","pc")?pctTxt(g("e","pc")):"");
 }
 
 async function atualizar(){
@@ -213,7 +232,7 @@ async function atualizar(){
     status("ao vivo · "+new Date().toLocaleTimeString("pt-BR"),"live");
   }catch(e){
     status("falha na leitura","err");
-    aviso(`Não foi possível ler o TSE (${e.message}). Se for erro de rede/CORS, o navegador bloqueou o acesso direto ao TSE a partir deste arquivo.`,true);
+    aviso(`Não foi possível ler o TSE (${e.message}). Se for HTTP 404, o TSE ainda não publicou esse arquivo; a página tenta de novo em 30 s.`,true);
   }
 }
 
