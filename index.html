@@ -149,11 +149,14 @@ footer a{color:inherit}
   <section class="panel reg" id="ufPanel" aria-label="Resultado por estado">
     <div class="reg-head">
       <div class="eyebrow">Por estado</div>
+      <div class="controls">
+      <input id="ufBusca" type="search" placeholder="Buscar estado ou sigla" aria-label="Buscar estado" autocomplete="off">
       <select id="ufOrdem" aria-label="Ordenar estados">
         <option value="regiao">Agrupar por região</option>
         <option value="apurado">Menos apurados primeiro</option>
         <option value="eleitores">Maiores colégios primeiro</option>
       </select>
+      </div>
     </div>
     <div id="ufRows" class="reg"><div class="small">Carregando as 27 UFs…</div></div>
   </section>
@@ -331,17 +334,21 @@ function renderUFs(){
   const ordem=ordemNac, modo=$("ufOrdem").value;
   const ap=u=>{const x=porUF[u];return x&&x.ts?x.st/x.ts:2};
   const tam=u=>{const x=porUF[u];return x?x.ts:0};
+  const norm=t=>t.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
+  const q=norm($("ufBusca").value||"");
+  const bate=u=>!q||norm(NOMES_UF[u]).includes(q)||u===q;
   const lin=u=>linha(NOMES_UF[u],[u],porUF,ordem,u.toUpperCase());
   let html="";
   if(modo==="regiao"){
     for(const rg of REGIOES){
-      html+=`<div class="uf-sub">${rg.nm}</div>`+rg.ufs.slice().sort((a,b)=>NOMES_UF[a].localeCompare(NOMES_UF[b],"pt")).map(lin).join("");
+      const us=rg.ufs.filter(bate); if(!us.length) continue;
+      html+=`<div class="uf-sub">${rg.nm}</div>`+us.slice().sort((a,b)=>NOMES_UF[a].localeCompare(NOMES_UF[b],"pt")).map(lin).join("");
     }
   }else{
-    const lista=UFS.slice().sort(modo==="apurado"?(a,b)=>ap(a)-ap(b):(a,b)=>tam(b)-tam(a));
+    const lista=UFS.filter(bate).sort(modo==="apurado"?(a,b)=>ap(a)-ap(b):(a,b)=>tam(b)-tam(a));
     html=lista.map(lin).join("");
   }
-  $("ufRows").innerHTML=html;
+  $("ufRows").innerHTML=html||`<div class="small">Nenhum estado corresponde a “${esc($("ufBusca").value)}”.</div>`;
 }
 const esc=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
@@ -367,6 +374,7 @@ async function atualizar(){
 
 $("btnRefresh").addEventListener("click",()=>{ultRegiao=0;atualizar()});
 $("ufOrdem").addEventListener("change",renderUFs);
+$("ufBusca").addEventListener("input",renderUFs);
 $("codManual").addEventListener("change",()=>{elecFed=null;atualizar()});
 atualizar();
 timer=setInterval(atualizar,30000);
