@@ -88,6 +88,9 @@ button:hover{border-color:var(--muted)}
 .reg-track{height:4px;border-radius:2px;background:var(--line);overflow:hidden}
 .reg-track b{display:block;height:100%;background:var(--ink);transition:width .6s ease}
 .reg-nums{display:flex;flex-wrap:wrap;gap:4px 14px;font:400 12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.reg-dif{font:400 13px var(--body);color:var(--muted);font-variant-numeric:tabular-nums;display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.reg-dif b{color:var(--ink);font-weight:600}
+.reg-dif .sw{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:2px}
 @media (max-width:520px){.reg-row{grid-template-columns:1fr}}
 footer{font-size:12px;color:var(--muted)}
 footer a{color:inherit}
@@ -318,6 +321,13 @@ function linha(nome,ufs,porUF,ordem,sub){
   const f2=x=>x.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
   const segs=cs.map(c=>`<i style="width:${c.p}%;background:${c.cor}">${c.p>=12?f2(c.p)+"%":""}</i>`).join("");
   const nums=cs.map(c=>`<span>${esc(c.nm)} ${f2(c.p)}% · ${fmt(c.vap)}</span>`).join("");
+  const rk=cs.slice().sort((a,b)=>b.vap-a.vap);
+  let dif="";
+  if(rk.length>=2&&tot>0){
+    const dv=rk[0].vap-rk[1].vap, dp=rk[0].p-rk[1].p;
+    dif=dv===0?`<div class="reg-dif">Empate</div>`:
+      `<div class="reg-dif"><span class="sw" style="background:${rk[0].cor}"></span><b>${esc(rk[0].nm)}</b> à frente por <b>${fmt(dv)}</b> votos · <b>${f2(dp)} p.p.</b></div>`;
+  }
   const faltou=ok<ufs.length?(ufs.length===1?" · sem dados":` · ${ufs.length-ok} UF sem dados`):"";
   return `<div class="reg-row">
     <div><div class="reg-nm">${esc(nome)}</div><div class="reg-ap">${sub?esc(sub)+" · ":""}${f2(ap)}% apurado${faltou}</div></div>
@@ -325,6 +335,7 @@ function linha(nome,ufs,porUF,ordem,sub){
       <div class="reg-split">${segs}</div>
       <div class="reg-track" title="Seções apuradas"><b style="width:${Math.min(ap,100)}%"></b></div>
       <div class="reg-nums">${nums}</div>
+      ${dif}
     </div>
   </div>`;
 }
