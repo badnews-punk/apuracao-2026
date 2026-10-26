@@ -88,6 +88,15 @@ button:hover{border-color:var(--muted)}
 .reg-track{height:4px;border-radius:2px;background:var(--line);overflow:hidden}
 .reg-track b{display:block;height:100%;background:var(--ink);transition:width .6s ease}
 .reg-nums{display:flex;flex-wrap:wrap;gap:4px 14px;font:400 12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.t1-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.t1-card{display:grid;gap:10px;padding:14px;border:1px solid var(--line);border-radius:10px;min-width:0}
+.t1-card h3{margin:0;font:600 16px/1.25 var(--body);display:flex;align-items:center;gap:8px}
+.t1-card h3 .sw{width:10px;height:10px;border-radius:2px;display:inline-block;flex:none}
+.t1-tab{display:grid;grid-template-columns:auto 1fr 1fr;gap:4px 12px;font:400 13px var(--mono);font-variant-numeric:tabular-nums}
+.t1-tab .h{color:var(--muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+.t1-tab .r{text-align:right}
+.up{color:var(--ok)} .down{color:var(--err)}
+.reg-t1{font:400 12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
 .reg-dif{font:400 13px var(--body);color:var(--muted);font-variant-numeric:tabular-nums;display:flex;flex-wrap:wrap;align-items:center;gap:4px}
 .reg-dif b{color:var(--ink);font-weight:600}
 .reg-dif .sw{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:2px}
@@ -135,6 +144,14 @@ footer a{color:inherit}
     </div>
   </section>
 
+  <section class="panel reg" id="t1Panel" hidden aria-label="Comparativo com o 1º turno">
+    <div class="reg-head">
+      <div class="eyebrow">Comparativo com o 1º turno · Brasil</div>
+      <div class="small" id="t1Info"></div>
+    </div>
+    <div class="t1-grid" id="t1Rows"></div>
+  </section>
+
   <section class="panel split-wrap" id="splitPanel" hidden>
     <div class="eyebrow">Votos válidos</div>
     <div class="split" id="split"></div>
@@ -166,7 +183,7 @@ footer a{color:inherit}
 
   <section class="panel totals" id="totais"></section>
 
-  <footer>Dados: divulgação oficial do TSE (resultados.tse.jus.br). Números parciais podem mudar até a totalização final. Brasil atualiza a cada 30 s; regiões e estados a cada 60 s (soma das 27 UFs, sem exterior).</footer>
+  <footer>Dados: divulgação oficial do TSE (resultados.tse.jus.br). Números parciais podem mudar até a totalização final. No 1º turno, os percentuais por região e estado consideram os votos válidos de todos os candidatos. Brasil atualiza a cada 30 s; regiões e estados a cada 60 s (soma das 27 UFs, sem exterior).</footer>
 </div>
 
 <script>
@@ -176,6 +193,8 @@ const UFS="ac al ap am ba ce df es go ma mt ms mg pa pb pr pe pi rj rn rs ro rr 
 const COLORS=["var(--c1)","var(--c2)","var(--muted)"];
 /* Lula em vermelho, o outro candidato em azul */
 const cor=nm=>/lula/i.test(nm||"")?"var(--red)":"var(--blue)";
+let ultCands=[];
+let elecT1=null, t1Nac=null, t1PorUF=null, ultT1=0;
 let elecFed=null, elecEst=null, timer=null, ordemNac=[], ultRegiao=0;
 const $=id=>document.getElementById(id);
 const pad6=c=>String(c).padStart(6,"0");
@@ -205,6 +224,8 @@ async function descobrir(){
   const isFed=e=>/federal|presid/i.test(e.nm||"")||JSON.stringify(e.abr||"").includes('"Presidente"');
   elecFed=(t2.find(isFed)||null)?.cd||null;
   elecEst=(t2.find(e=>/estadual/i.test(e.nm||""))||null)?.cd||null;
+  const t1=elist.filter(e=>String(e.t)==="1");
+  elecT1=(t1.find(e=>String(e.cdt2||"")===String(elecFed))||t1.find(isFed)||null)?.cd||null;
 }
 
 const codAtual=()=>$("codManual").value.trim()||elecFed;
@@ -257,6 +278,7 @@ function render(d){
   });
 
   ordemNac=cands.map(c=>({n:String(c.n),nm:c.nm}));
+  ultCands=cands; renderT1(cands);
   $("gapPanel").hidden=cands.length<2;
   if(cands.length>=2){
     const a=cands[0], b=cands[1];
@@ -312,6 +334,15 @@ async function atualizarRegioes(cd){
   ultPorUF=porUF; renderUFs();
 }
 
+function linhaT1(ufs,ordem){
+  if(!t1PorUF||!ordem.length) return "";
+  const v={}; let ok=0;
+  for(const u of ufs){const x=t1PorUF[u]; if(!x) continue; ok++; for(const k in x.votos) v[k]=(v[k]||0)+x.votos[k];}
+  if(!ok) return "";
+  const tot=Object.values(v).reduce((a,b)=>a+b,0); if(!tot) return "";
+  const f2=x=>x.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+  return `<div class="reg-t1">1º turno: ${ordem.slice(0,2).map(c=>`${esc(c.nm)} ${f2((v[c.n]||0)/tot*100)}%`).join(" · ")}</div>`;
+}
 function linha(nome,ufs,porUF,ordem,sub){
   let st=0,ts=0,ok=0; const v={};
   for(const u of ufs){const x=porUF[u]; if(!x) continue; ok++; st+=x.st; ts+=x.ts; for(const k in x.votos) v[k]=(v[k]||0)+x.votos[k];}
@@ -336,6 +367,7 @@ function linha(nome,ufs,porUF,ordem,sub){
       <div class="reg-track" title="Seções apuradas"><b style="width:${Math.min(ap,100)}%"></b></div>
       <div class="reg-nums">${nums}</div>
       ${dif}
+      ${linhaT1(ufs,ordem)}
     </div>
   </div>`;
 }
@@ -361,6 +393,42 @@ function renderUFs(){
   }
   $("ufRows").innerHTML=html||`<div class="small">Nenhum estado corresponde a “${esc($("ufBusca").value)}”.</div>`;
 }
+/* 1º turno: dados finais, lidos uma vez (tenta de novo a cada 5 min se falhar) */
+async function carregarT1(){
+  if(!elecT1||(t1Nac&&t1PorUF)||Date.now()-ultT1<300000) return;
+  ultT1=Date.now();
+  try{ if(!t1Nac) t1Nac=extrairUF(await getJSON(urlUF("br",elecT1))); }catch(e){}
+  try{
+    if(!t1PorUF){
+      const res=await Promise.allSettled(UFS.map(u=>getJSON(urlUF(u,elecT1)).then(d=>[u,extrairUF(d)])));
+      const m={}; let ok=0; for(const r of res) if(r.status==="fulfilled"){m[r.value[0]]=r.value[1];ok++}
+      if(ok) t1PorUF=m;
+    }
+  }catch(e){}
+}
+const sinal=(x,dec)=>(x>0?"+":x<0?"−":"")+(dec?Math.abs(x).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):fmt(Math.abs(x)));
+const cls=x=>x>0?"up":x<0?"down":"";
+
+function renderT1(cands){
+  if(!t1Nac||cands.length<2){$("t1Panel").hidden=true;return}
+  $("t1Panel").hidden=false;
+  const tot1=Object.values(t1Nac.votos).reduce((a,b)=>a+b,0);
+  $("t1Info").textContent=`1º turno: ${fmt(tot1)} votos válidos`;
+  $("t1Rows").innerHTML=cands.slice(0,2).map(c=>{
+    const v1=t1Nac.votos[String(c.n)]||0, p1=tot1?v1/tot1*100:0;
+    const v2=num(c.vap), p2=num(c.pvap);
+    const f2=x=>x.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+    return `<div class="t1-card">
+      <h3><span class="sw" style="background:${cor(c.nm)}"></span>${esc(c.nm)}</h3>
+      <div class="t1-tab">
+        <span class="h"></span><span class="h r">Votos</span><span class="h r">% válidos</span>
+        <span>1º turno</span><span class="r">${fmt(v1)}</span><span class="r">${f2(p1)}%</span>
+        <span>2º turno</span><span class="r">${fmt(v2)}</span><span class="r">${f2(p2)}%</span>
+        <span>Variação</span><span class="r ${cls(v2-v1)}">${sinal(v2-v1)}</span><span class="r ${cls(p2-p1)}">${sinal(p2-p1,1)} p.p.</span>
+      </div>
+    </div>`;}).join("");
+}
+
 const esc=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 async function atualizar(){
@@ -372,6 +440,7 @@ async function atualizar(){
     if(!url){aviso("O TSE ainda não publicou o código da eleição de 2º turno no config. Informe o código manualmente no campo acima, se souber.");status("aguardando código");return}
     const d=await getJSON(url);
     render(d); aviso("");
+    carregarT1().then(()=>{renderT1(ultCands);renderUFs();if(ultPorUF)$("regRows").innerHTML=REGIOES.map(rg=>linha(rg.nm,rg.ufs,ultPorUF,ordemNac)).join("")});
     if(Date.now()-ultRegiao>55000){
       ultRegiao=Date.now();
       atualizarRegioes(codAtual()).catch(e=>{$("regRows").innerHTML=`<div class="small">Não foi possível ler as UFs (${esc(e.message)}).</div>`});
